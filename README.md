@@ -30,3 +30,19 @@ The project will include:
 - M2 
 - M3  
 - M4
+
+
+---
+### Folder Structure
+
+.
+├── app
+│   └── NodeGoat
+├── docs
+│   └── architecture
+│       └── put_the_before_change_Val_SS
+├── README.md
+├── report
+├── security
+└── tests
+
