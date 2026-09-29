@@ -22,9 +22,12 @@ jobs:
           node-version: 20
 
       - name: Install dependencies
-        working-directory: ./app/NodeGoat
-        run: npm install
+        run: |
+          cd app/NodeGoat
+          npm install
 
       - name: Run tests
-        working-directory: ./app/NodeGoat
-        run: npm test
+        run: |
+          cd app/NodeGoat
+          npm test
+          
