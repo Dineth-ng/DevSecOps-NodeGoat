@@ -1,4 +1,4 @@
-]# IE3142 DevOps Security - OWASP NodeGoat DevSecOps Project
+# IE3142 DevOps Security - OWASP NodeGoat DevSecOps Project
 
 ## Project Overview
 
