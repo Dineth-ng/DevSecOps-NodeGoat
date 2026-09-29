@@ -13,7 +13,7 @@ this project is a DevSecOps security project based on OWASP NodeGoat
 
 ---
 ## Local Setup
-Coming Soon ...
+Coming Soon ..
 
 --
 ## Security 
