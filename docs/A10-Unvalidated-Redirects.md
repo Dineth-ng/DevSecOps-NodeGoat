@@ -37,24 +37,23 @@ The seeded credentials were confirmed in `NodeGoat/artifacts/db-reset.js`:
 
 After starting NodeGoat and seeding MongoDB:
 
-1. Sign in at `http://localhost:4000/login`.
-2. Browse to `http://localhost:4000/learn?url=https://example.com`.
+1. Sign in at `http://127.0.0.1:4101/login` (parent commit `440f64c`, separate worktree).
+2. Browse to `http://127.0.0.1:4101/learn?url=https://example.com/`.
 3. Confirm that the browser leaves NodeGoat and reaches `https://example.com`.
-4. Browse to `http://localhost:4000/learn?url=/profile` and confirm the internal redirect reaches `/profile`.
-5. Browse to `http://localhost:4000/learn?url=//example.com` and record the resulting external navigation.
+4. Additional checks can use `/learn?url=/profile` and `/learn?url=//example.com`. These are separate from the captured HTTPS-payload demonstration.
 
 For authenticated curl evidence, the actual login fields are `userName` and `password`. CSRF middleware is disabled in this intentionally vulnerable version, so the hidden `_csrf` value is empty. One reproducible sequence is:
 
 ```powershell
-curl.exe -i -c nodegoat-cookies.txt -d "userName=user1&password=User1_123&_csrf=" http://localhost:4000/login
-curl.exe -I -b nodegoat-cookies.txt "http://localhost:4000/learn?url=https://example.com"
+curl.exe -sS -c nodegoat-cookies.txt -D - -o NUL -d "userName=user1&password=User1_123" http://127.0.0.1:4101/login
+curl.exe -sS -b nodegoat-cookies.txt -D - -o NUL "http://127.0.0.1:4101/learn?url=https://example.com/"
 ```
 
 ### Before-fix expected result
 
 The malicious authenticated request returns an external `Location: https://example.com` and the browser follows it. The internal `/profile` target remains within NodeGoat. A plain unauthenticated request is not valid evidence because middleware redirects it to `/login` first.
 
-Live before-fix reproduction was not completed in this workspace because the host has no Docker CLI/engine, WSL, or local MongoDB. No before screenshots are claimed.
+Live reproduction completed on 30 September 2026. The isolated parent worktree at `440f64c` ran on port 4101. Login returned `Location: /dashboard`; an authenticated GET to `/learn?url=https://example.com/` returned HTTP 302 with `Location: https://example.com/`. Chrome reached the external destination. The screenshots are listed below.
 
 ## Fix
 
@@ -87,7 +86,7 @@ After rebuilding and starting the application, log in and verify:
 
 Authenticated curl can reuse the login sequence above. The second command must return a local `Location: /`, never the supplied external URL.
 
-Live after-fix HTTP verification is pending because Docker is unavailable on the host. No after screenshots are claimed.
+Live verification of fixed commit `00c909b` completed on port 4102. Use a separate login and cookie jar on port 4102 before testing. The same authenticated external payload returned HTTP 302 with `Location: /`, and the browser remained in NodeGoat. The table above also lists additional verification cases; the screenshots specifically demonstrate the HTTPS example.com payload.
 
 ## Before vs. after
 
@@ -101,20 +100,20 @@ Live after-fix HTTP verification is pending because Docker is unavailable on the
 
 ## Docker issue
 
-Running `docker --version`, `docker compose version`, and `docker compose config` failed because PowerShell could not find the `docker` command. Checks of the standard Docker Desktop executable locations and the `com.docker.service` service found no installation. WSL and local MongoDB are also absent.
+Initial Docker checks failed because Docker was unavailable. The lab was subsequently executed natively on Windows using Node.js, a portable MongoDB 4.4.31 server bound to 127.0.0.1, and runtime dependencies installed in a separate folder. MongoDB was seeded with the repository's lab users. The vulnerable and fixed applications used ports 4101 and 4102 respectively.
 
-This is a missing host prerequisite rather than an error demonstrated in `Dockerfile` or `docker-compose.yml`. Consequently, neither Docker file was changed. Install/start Docker Desktop (including its Compose plugin), then run the requested build and runtime verification commands before collecting browser or curl evidence.
+Neither Docker file was changed. Docker builds and Compose execution were not verified; the recorded runtime evidence is from native Windows processes, not containers.
 
 ## Screenshot checklist and captions
 
-No screenshots have been created or claimed. Save manual captures under `evidence/A10-Unvalidated-Redirects/` using these names:
+Seven screenshots are saved under `evidence/A10-Unvalidated-Redirects/`. The before-code image is an actual VS Code capture. Before-payload and external-destination images were captured by the user in Chrome. Both curl images were captured by the user from Windows Command Prompt inside Windows Terminal, running Windows curl.exe. The after-code image is GitHub's code viewer; the after-browser image is an automated Edge page capture. Earlier HTML report images have been replaced.
 
 - `before/A10-before-vulnerable-code.png` — the pre-fix `GET /learn` code showing `req.query.url` passed directly to `res.redirect()`.
 - `before/A10-before-payload.png` — the authenticated browser address bar showing the complete localhost malicious URL before navigation.
 - `before/A10-before-external-redirect.png` — the resulting browser page and address bar at `example.com`.
 - `before/A10-before-curl.png` — authenticated curl output showing the external `Location` header.
-- `after/A10-after-secure-code.png` — `getSafeRedirect()` and the `/learn` route using its validated result.
-- `after/A10-after-blocked-redirect.png` — the malicious localhost request and evidence that the browser remains in NodeGoat at `/`.
+- `after/A10-after-secure-code.png` — the `/learn` route calling `getSafeRedirect()` at fixed commit `00c909b`; read `redirect.js` for the validator implementation.
+- `after/A10-after-blocked-redirect.png` — the authenticated dashboard reached after the external payload; this page-only capture has no address bar, so use the after-curl Location header as destination evidence.
 - `after/A10-after-curl.png` — authenticated curl output showing `Location: /`.
 
 ## Files modified
@@ -129,4 +128,5 @@ No screenshots have been created or claimed. Save manual captures under `evidenc
 - `node --check` passed for the changed route, helper, and unit-test files.
 - The focused validator test passed all nine cases: `/profile`, `/dashboard`, `/`, HTTPS URL, HTTP URL, protocol-relative URL, backslash-containing value, `undefined`, and numeric input.
 - `npm test` could not start because `node_modules/grunt-cli/bin/grunt` is absent. Dependencies were not broadly installed or upgraded on the host.
-- Docker build, container status/log checks, and authenticated live HTTP tests remain pending because Docker is not installed.
+- Authenticated live HTTP and browser verification passed for the external HTTPS payload: external redirect before, local fallback after.
+- Docker build and container checks remain unverified. No claim is made that other intentional NodeGoat vulnerabilities were fixed or that these focused checks constitute a comprehensive security audit.
