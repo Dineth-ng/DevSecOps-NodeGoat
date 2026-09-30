@@ -2,16 +2,16 @@ name: NodeGoat DevSecOps Pipeline
 
 on:
   push:
-    branches:
-      - Dev
-
   pull_request:
-    branches:
-      - Dev
+    branches: [Dev, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-  build:
-    name: Build and Test
+  tests:
+    name: Application Unit Tests
     runs-on: ubuntu-latest
 
     defaults:
@@ -19,19 +19,189 @@ jobs:
         working-directory: NodeGoat
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
 
-      - name: Show Node Version
-        run: node --version
-
-      - name: Show NPM Version
-        run: npm --version
-
-      - name: Install Dependencies
+      - name: Install dependencies
+        env:
+          CYPRESS_INSTALL_BINARY: "0"
         run: npm ci
+
+      - name: Run existing redirect unit tests
+        run: ./node_modules/.bin/mocha "test/unit/**/*.js"
+
+  sast:
+    name: Semgrep SAST Blocking Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create report directory
+        run: mkdir -p reports
+
+      - name: Scan application code
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/src" \
+            -w /src \
+            semgrep/semgrep:latest \
+            semgrep scan \
+            --config .semgrep.yml \
+            --error \
+            --strict \
+            --metrics off \
+            --json \
+            --output reports/semgrep.json \
+            NodeGoat/app NodeGoat/config NodeGoat/server.js
+
+      - name: Upload SAST report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-report
+          path: reports/semgrep.json
+          if-no-files-found: warn
+
+  secrets:
+    name: Gitleaks Secrets Blocking Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout full repository history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create report directory
+        run: mkdir -p reports
+
+      - name: Scan repository history for secrets
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/repo" \
+            zricethezav/gitleaks:latest \
+            git /repo \
+            --redact \
+            --exit-code 1 \
+            --report-format json \
+            --report-path /repo/reports/gitleaks.json
+
+      - name: Upload redacted secrets report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: reports/gitleaks.json
+          if-no-files-found: warn
+
+  dependencies:
+    name: npm audit Dependency Report
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: NodeGoat
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        env:
+          CYPRESS_INSTALL_BINARY: "0"
+        run: npm ci
+
+      - name: Generate dependency vulnerability report
+        shell: bash
+        run: |
+          mkdir -p ../reports
+
+          set +e
+          npm audit --json > ../reports/npm-audit.json
+          audit_status=$?
+          set -e
+
+          # An audit service or configuration error is a real job failure.
+          node -e '
+            const fs = require("fs");
+            const report = JSON.parse(
+              fs.readFileSync("../reports/npm-audit.json", "utf8")
+            );
+
+            if (report.error) {
+              console.error(report.error);
+              process.exit(2);
+            }
+
+            console.log(JSON.stringify(
+              report.metadata?.vulnerabilities || {}, null, 2
+            ));
+          '
+
+          if [ "$audit_status" -gt 1 ]; then
+            exit "$audit_status"
+          fi
+
+          if [ "$audit_status" -eq 1 ]; then
+            echo "::warning::Dependency vulnerabilities found. Review npm-audit-report."
+          fi
+
+      - name: Upload dependency report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit-report
+          path: reports/npm-audit.json
+          if-no-files-found: warn
+
+  container:
+    name: Docker Build and Trivy Report
+    runs-on: ubuntu-latest
+    needs: [tests, sast, secrets, dependencies]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build NodeGoat image
+        run: |
+          docker build \
+            --tag nodegoat:${{ github.sha }} \
+            ./NodeGoat
+
+      - name: Create report directory
+        run: mkdir -p reports
+
+      - name: Scan built image with Trivy
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$GITHUB_WORKSPACE/reports:/reports" \
+            aquasec/trivy:latest \
+            image \
+            --scanners vuln \
+            --severity HIGH,CRITICAL \
+            --exit-code 0 \
+            --format json \
+            --output /reports/trivy.json \
+            nodegoat:${{ github.sha }}
+
+      - name: Upload container report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report
+          path: reports/trivy.json
+          if-no-files-found: warn
