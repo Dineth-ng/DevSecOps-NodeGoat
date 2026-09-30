@@ -88,6 +88,7 @@ jobs:
             -v "$GITHUB_WORKSPACE:/repo" \
             zricethezav/gitleaks:latest \
             git /repo \
+            --gitleaks-ignore-path /repo/.gitleaksignore \
             --redact \
             --exit-code 1 \
             --report-format json \
