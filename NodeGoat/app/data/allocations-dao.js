@@ -59,6 +59,7 @@ const AllocationsDAO = function(db){
 
 	const searchCriteria = () => {
 		if (threshold) {
+			// fix nosql injection
 			const parsedThreshold = parseInt(threshold, 10);
 			if (!isNaN(parsedThreshold) && parsedThreshold >= 0 && parsedThreshold <= 99) {
 				return {
@@ -69,6 +70,7 @@ const AllocationsDAO = function(db){
 			return { userId: parsedUserId, stocks: { $gt: 999 } };
 		}
 		return { userId: parsedUserId };
+			//block  
 	};
 
         allocationsCol.find(searchCriteria()).toArray((err, allocations) => {
