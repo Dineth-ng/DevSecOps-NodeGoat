@@ -61,6 +61,35 @@ jobs:
             --output reports/semgrep.json \
             NodeGoat/app NodeGoat/config NodeGoat/server.js
 
+      - name: Show Semgrep findings
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("reports/semgrep.json")
+
+          if not path.exists():
+              print("No Semgrep report was generated.")
+              raise SystemExit(1)
+
+          report = json.loads(path.read_text())
+          findings = report.get("results", [])
+
+          print("Total findings:", len(findings))
+
+          for finding in findings:
+              print()
+              print("Rule:", finding["check_id"])
+              print("File:", finding["path"])
+              print("Line:", finding["start"]["line"])
+              print("Message:", finding["extra"]["message"])
+
+          for error in report.get("errors", []):
+              print("Scanner error:", error)
+          PY
+
       - name: Upload SAST report
         if: always()
         uses: actions/upload-artifact@v4
@@ -82,10 +111,18 @@ jobs:
       - name: Create report directory
         run: mkdir -p reports
 
+      - name: Verify historical exceptions file
+        run: |
+          test -f .gitleaksignore || {
+            echo "::error::.gitleaksignore is missing from the repository root."
+            exit 1
+          }
+
       - name: Scan repository history for secrets
         run: |
           docker run --rm \
             -v "$GITHUB_WORKSPACE:/repo" \
+            -w /repo \
             zricethezav/gitleaks:latest \
             git /repo \
             --gitleaks-ignore-path /repo/.gitleaksignore \
@@ -93,6 +130,31 @@ jobs:
             --exit-code 1 \
             --report-format json \
             --report-path /repo/reports/gitleaks.json
+
+      - name: Show redacted finding locations
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("reports/gitleaks.json")
+
+          if not path.exists():
+              print("No Gitleaks report was generated.")
+              raise SystemExit(1)
+
+          findings = json.loads(path.read_text())
+          print("Total findings:", len(findings))
+
+          for finding in findings:
+              print()
+              print("Rule:", finding.get("RuleID"))
+              print("File:", finding.get("File"))
+              print("Line:", finding.get("StartLine"))
+              print("Commit:", finding.get("Commit"))
+              print("Fingerprint:", finding.get("Fingerprint"))
+          PY
 
       - name: Upload redacted secrets report
         if: always()
@@ -134,7 +196,6 @@ jobs:
           audit_status=$?
           set -e
 
-          # An audit service or configuration error is a real job failure.
           node -e '
             const fs = require("fs");
             const report = JSON.parse(
@@ -198,6 +259,28 @@ jobs:
             --format json \
             --output /reports/trivy.json \
             nodegoat:${{ github.sha }}
+
+      - name: Show container vulnerability counts
+        run: |
+          python3 - <<'PY'
+          import json
+          from collections import Counter
+          from pathlib import Path
+
+          report = json.loads(
+              Path("reports/trivy.json").read_text()
+          )
+
+          counts = Counter()
+
+          for result in report.get("Results", []):
+              for vulnerability in result.get("Vulnerabilities", []) or []:
+                  counts[vulnerability.get("Severity", "UNKNOWN")] += 1
+
+          print("HIGH findings:", counts["HIGH"])
+          print("CRITICAL findings:", counts["CRITICAL"])
+          print("Trivy is reporting-only in this workflow.")
+          PY
 
       - name: Upload container report
         if: always()
