@@ -51,7 +51,7 @@ const index = (app, db) => {
     app.get("/contributions", isLoggedIn, contributionsHandler.displayContributions);
     app.post("/contributions", isLoggedIn, contributionsHandler.handleContributionsUpdate);
 
-    // Benefits Page - Enforce Function Level Access Control with isAdmin middleware
+    //Fix Benefits Page - Enforce Function Level Access Control with isAdmin middleware
     app.get("/benefits", isLoggedIn, isAdmin, benefitsHandler.displayBenefits);
     app.post("/benefits", isLoggedIn, isAdmin, benefitsHandler.updateBenefits);
 

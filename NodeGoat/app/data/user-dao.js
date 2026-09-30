@@ -22,7 +22,8 @@ function UserDAO(db) {
             firstName,
             lastName,
             benefitStartDate: this.getRandomFutureDate(),
-	    password: bcrypt.hashSync(password, bcrypt.genSaltSync())
+	    password
+        };
 
         // Add email if set
         if (email) {
@@ -53,7 +54,7 @@ function UserDAO(db) {
         // Helper function to compare passwords
         const comparePassword = (fromUser, fromDB) => {
             // Fix Broken Auth
-    	    return bcrypt.compareSync(fromUser, fromDB);
+    	    return fromDB === fromUser;
         };
 
         // Callback to pass to MongoDB that validates a user document
