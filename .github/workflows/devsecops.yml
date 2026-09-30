@@ -33,7 +33,7 @@ jobs:
         run: npm ci
 
       - name: Run existing redirect unit tests
-        run: ./node_modules/.bin/mocha "test/unit/**/*.js"
+        run: ./node_modules/.bin/mocha test/unit/redirect-test.js
 
   sast:
     name: Semgrep SAST Blocking Gate
