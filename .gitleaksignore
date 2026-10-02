@@ -1,0 +1,6 @@
+# Public upstream NodeGoat training fixtures from the initial import.
+# Exceptions apply only to these reviewed historical findings.
+
+3e7e33cfe6dae28b0fafd7f70d6f15c48aecd987:NodeGoat/artifacts/cert/server.key:private-key:1
+3e7e33cfe6dae28b0fafd7f70d6f15c48aecd987:NodeGoat/config/env/development.js:generic-api-key:6
+3e7e33cfe6dae28b0fafd7f70d6f15c48aecd987:NodeGoat/config/env/test.js:generic-api-key:6

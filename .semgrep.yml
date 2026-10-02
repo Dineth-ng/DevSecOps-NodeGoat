@@ -1,0 +1,17 @@
+rules:
+  - id: nodegoat-unsafe-eval
+    languages: [javascript]
+    severity: ERROR
+    message: >
+      eval executes JavaScript. Remove it and validate inputs
+      using a suitable numeric or structured parser.
+    pattern: eval(...)
+
+  - id: nodegoat-mongodb-where
+    languages: [javascript]
+    severity: ERROR
+    message: >
+      MongoDB $where executes JavaScript. Replace it with
+      ordinary query operators and validated input.
+    pattern: |
+      {$where: $EXPRESSION, ...}

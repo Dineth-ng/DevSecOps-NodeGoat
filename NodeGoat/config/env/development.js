@@ -1,4 +1,5 @@
 module.exports = {
+HEAD
    // If you want to debug regression tests, you will need the following which is also in the test config:
    zapHostName: "192.168.56.20",
    zapPort: "8080",
@@ -10,5 +11,18 @@ module.exports = {
       // jshint -W101
       `<script>document.write("<script src='http://" + (location.host || "localhost").split(":")[0] + ":35729/livereload.js'></" + "script>");</script>`
       // jshint +W101
+
+   zapHostName: "192.168.56.20",
+   zapPort: "8080",
+
+    zapApiKey: process.env.ZAP_API_KEY,
+
+
+   zapApiFeedbackSpeed: 5000, 
+   environmentalScripts: [
+
+      `<script>document.write("<script src='http://" + (location.host || "localhost").split(":")[0] + ":35729/livereload.js'></" + "script>");</script>`
+
+88679bd19abe357d498d1f3007769a09887ccebf
    ]
 };

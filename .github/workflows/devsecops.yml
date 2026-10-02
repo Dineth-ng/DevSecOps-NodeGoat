@@ -1,0 +1,291 @@
+name: NodeGoat DevSecOps Pipeline
+
+on:
+  push:
+  pull_request:
+    branches: [Dev, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Application Unit Tests
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: NodeGoat
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        env:
+          CYPRESS_INSTALL_BINARY: "0"
+        run: npm ci
+
+      - name: Run existing redirect unit tests
+        run: ./node_modules/.bin/mocha test/unit/redirect-test.js
+
+  sast:
+    name: Semgrep SAST Blocking Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create report directory
+        run: mkdir -p reports
+
+      - name: Scan application code
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/src" \
+            -w /src \
+            semgrep/semgrep:latest \
+            semgrep scan \
+            --config .semgrep.yml \
+            --error \
+            --strict \
+            --metrics off \
+            --json \
+            --output reports/semgrep.json \
+            NodeGoat/app NodeGoat/config NodeGoat/server.js
+
+      - name: Show Semgrep findings
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("reports/semgrep.json")
+
+          if not path.exists():
+              print("No Semgrep report was generated.")
+              raise SystemExit(1)
+
+          report = json.loads(path.read_text())
+          findings = report.get("results", [])
+
+          print("Total findings:", len(findings))
+
+          for finding in findings:
+              print()
+              print("Rule:", finding["check_id"])
+              print("File:", finding["path"])
+              print("Line:", finding["start"]["line"])
+              print("Message:", finding["extra"]["message"])
+
+          for error in report.get("errors", []):
+              print("Scanner error:", error)
+          PY
+
+      - name: Upload SAST report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-report
+          path: reports/semgrep.json
+          if-no-files-found: warn
+
+  secrets:
+    name: Gitleaks Secrets Blocking Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout full repository history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create report directory
+        run: mkdir -p reports
+
+      - name: Verify historical exceptions file
+        run: |
+          test -f .gitleaksignore || {
+            echo "::error::.gitleaksignore is missing from the repository root."
+            exit 1
+          }
+
+      - name: Scan repository history for secrets
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/repo" \
+            -w /repo \
+            zricethezav/gitleaks:latest \
+            git /repo \
+            --gitleaks-ignore-path /repo/.gitleaksignore \
+            --redact \
+            --exit-code 1 \
+            --report-format json \
+            --report-path /repo/reports/gitleaks.json
+
+      - name: Show redacted finding locations
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("reports/gitleaks.json")
+
+          if not path.exists():
+              print("No Gitleaks report was generated.")
+              raise SystemExit(1)
+
+          findings = json.loads(path.read_text())
+          print("Total findings:", len(findings))
+
+          for finding in findings:
+              print()
+              print("Rule:", finding.get("RuleID"))
+              print("File:", finding.get("File"))
+              print("Line:", finding.get("StartLine"))
+              print("Commit:", finding.get("Commit"))
+              print("Fingerprint:", finding.get("Fingerprint"))
+          PY
+
+      - name: Upload redacted secrets report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: reports/gitleaks.json
+          if-no-files-found: warn
+
+  dependencies:
+    name: npm audit Dependency Report
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: NodeGoat
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        env:
+          CYPRESS_INSTALL_BINARY: "0"
+        run: npm ci
+
+      - name: Generate dependency vulnerability report
+        shell: bash
+        run: |
+          mkdir -p ../reports
+
+          set +e
+          npm audit --json > ../reports/npm-audit.json
+          audit_status=$?
+          set -e
+
+          node -e '
+            const fs = require("fs");
+            const report = JSON.parse(
+              fs.readFileSync("../reports/npm-audit.json", "utf8")
+            );
+
+            if (report.error) {
+              console.error(report.error);
+              process.exit(2);
+            }
+
+            console.log(JSON.stringify(
+              report.metadata?.vulnerabilities || {}, null, 2
+            ));
+          '
+
+          if [ "$audit_status" -gt 1 ]; then
+            exit "$audit_status"
+          fi
+
+          if [ "$audit_status" -eq 1 ]; then
+            echo "::warning::Dependency vulnerabilities found. Review npm-audit-report."
+          fi
+
+      - name: Upload dependency report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit-report
+          path: reports/npm-audit.json
+          if-no-files-found: warn
+
+  container:
+    name: Docker Build and Trivy Report
+    runs-on: ubuntu-latest
+    needs: [tests, sast, secrets, dependencies]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build NodeGoat image
+        run: |
+          docker build \
+            --tag nodegoat:${{ github.sha }} \
+            ./NodeGoat
+
+      - name: Create report directory
+        run: mkdir -p reports
+
+      - name: Scan built image with Trivy
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$GITHUB_WORKSPACE/reports:/reports" \
+            aquasec/trivy:latest \
+            image \
+            --scanners vuln \
+            --severity HIGH,CRITICAL \
+            --exit-code 0 \
+            --format json \
+            --output /reports/trivy.json \
+            nodegoat:${{ github.sha }}
+
+      - name: Show container vulnerability counts
+        run: |
+          python3 - <<'PY'
+          import json
+          from collections import Counter
+          from pathlib import Path
+
+          report = json.loads(
+              Path("reports/trivy.json").read_text()
+          )
+
+          counts = Counter()
+
+          for result in report.get("Results", []):
+              for vulnerability in result.get("Vulnerabilities", []) or []:
+                  counts[vulnerability.get("Severity", "UNKNOWN")] += 1
+
+          print("HIGH findings:", counts["HIGH"])
+          print("CRITICAL findings:", counts["CRITICAL"])
+          print("Trivy is reporting-only in this workflow.")
+          PY
+
+      - name: Upload container report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report
+          path: reports/trivy.json
+          if-no-files-found: warn
