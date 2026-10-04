@@ -29,3 +29,8 @@ test/e2e/videos/
 
 # ignore Snyk Code scanner files
 .dccache
+
+NodeGoat/artifacts/cert/*.key
+
+reports/
+gitleaks-local.json
