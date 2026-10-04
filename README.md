@@ -1,337 +1,861 @@
-# IE3142 DevOps Security - OWASP NodeGoat DevSecOps Project
+# 🔐 DevSecOps NodeGoat Security Project
 
-## Project Overview
+A DevSecOps security implementation based on the **OWASP NodeGoat** vulnerable Node.js application.
 
-This project is developed for the **IE3142 DevOps Security** module.
+This project demonstrates how security can be integrated into the software development lifecycle using:
 
-The project uses **OWASP NodeGoat**, an intentionally vulnerable
-Node.js web application, to demonstrate the integration of security
-into the software development lifecycle.
-
-The project covers:
-
-- Application architecture analysis
-- Docker containerisation
-- Threat modelling using STRIDE
-- Vulnerability identification
-- Vulnerability exploitation in a controlled local environment
-- Secure coding and remediation
-- Static Application Security Testing (SAST)
-- Software Composition Analysis (SCA)
-- Secrets scanning
-- Container vulnerability scanning
-- CI/CD security automation
+- Docker
+- Docker Compose
+- GitHub Actions
+- Semgrep SAST
+- Gitleaks Secret Scanning
+- npm Audit
+- Trivy Container Scanning
+- Secure coding fixes
+- Git branching and Pull Requests
 
 ---
 
-## Technology Stack
+# 📌 Project Overview
+
+OWASP NodeGoat is an intentionally vulnerable Node.js application designed for learning web application security.
+
+In this project, our group used NodeGoat to demonstrate a practical **DevSecOps workflow**.
+
+The main goals were:
+
+1. Identify vulnerable code.
+2. Exploit selected vulnerabilities.
+3. Apply secure coding fixes.
+4. Containerize the application.
+5. Harden the Docker environment.
+6. Build a CI/CD security pipeline.
+7. Automatically scan source code, dependencies, secrets, and Docker images.
+8. Store evidence of before-and-after security testing.
+
+---
+
+# 🛠 Technologies Used
 
 | Technology | Purpose |
 |---|---|
 | Node.js | Application runtime |
 | Express.js | Web application framework |
 | MongoDB | Database |
-| Docker | Application containerisation |
+| Docker | Application containerization |
 | Docker Compose | Multi-container orchestration |
 | GitHub Actions | CI/CD automation |
 | Semgrep | Static Application Security Testing |
-| npm audit | Dependency / SCA scanning |
-| Gitleaks | Secrets scanning |
-| Trivy | Container vulnerability scanning |
-| Git / GitHub | Version control and collaboration |
+| Gitleaks | Secret detection |
+| npm audit | Dependency vulnerability scanning |
+| Trivy | Docker image vulnerability scanning |
+| Git | Version control |
+| GitHub | Repository and Pull Request management |
 
 ---
 
-# Project Architecture
+# 🏗 Architecture
 
-The application consists primarily of a NodeGoat web application and
-MongoDB database running as containers.
+The application contains two main containers:
 
 ```text
-                    User
-                     |
-                     | HTTP
-                     v
-             +----------------+
-             |    NodeGoat    |
-             | Node.js/Express|
-             +--------+-------+
-                      |
-                      | Database Connection
-                      v
-             +----------------+
-             |    MongoDB     |
-             +----------------+
+                    Internet / User
+                           |
+                           |
+                     Port 4000
+                           |
+                           v
+                +---------------------+
+                |   NodeGoat Web App  |
+                |                     |
+                | Node.js + Express   |
+                | Non-root user       |
+                +----------+----------+
+                           |
+                           |
+                  Docker backend-net
+                           |
+                           v
+                +---------------------+
+                |      MongoDB        |
+                |                     |
+                |    Port 27017       |
+                | Internal only       |
+                +---------------------+
 ```
 
-The detailed architecture and trust-boundary diagram is available in:
+The web application communicates with MongoDB using Docker's internal DNS.
 
-`docs/architecture/`
+For example:
+
+```text
+mongodb://mongo:27017/nodegoat
+```
+
+`mongo` is the Docker Compose service name.
+
+MongoDB port `27017` is not published to the host.
+
+Only the NodeGoat web application is exposed:
+
+```text
+localhost:4000
+```
 
 ---
 
-# Repository Structure
+# 📂 Project Structure
 
 ```text
 DevSecOps-NodeGoat/
-|
+│
 ├── .github/
 │   └── workflows/
 │       └── devsecops.yml
-|
+│
 ├── docs/
 │   ├── architecture/
 │   └── vul_ss/
-|
+│
+├── evidence/
+│
 ├── NodeGoat/
 │   ├── app/
 │   ├── artifacts/
 │   ├── config/
 │   ├── test/
+│   │
 │   ├── Dockerfile
 │   ├── docker-compose.yml
+│   ├── .dockerignore
 │   ├── package.json
-│   ├── package-lock.json
 │   └── server.js
-|
+│
+├── .semgrep.yml
+├── .gitleaksignore
+├── .gitignore
+│
 └── README.md
 ```
 
 ---
 
-# Getting Started
+# 🐳 Docker Implementation
 
-## 1. Prerequisites
+The NodeGoat application was containerized using a multi-stage Docker build.
 
-Install:
+## Docker Security Improvements
 
-- Git
-- Docker
-- Docker Compose
+The Docker configuration includes:
 
-Verify:
+- Multi-stage build
+- Reduced runtime image
+- Production dependencies only
+- Non-root `node` user
+- Dedicated Docker network
+- MongoDB not exposed to the host
+- `no-new-privileges` security option
+- Persistent MongoDB volume
+- `.dockerignore` to reduce build context
 
-```bash
-git --version
-docker --version
-docker compose version
+Example:
+
+```dockerfile
+FROM node:12-alpine AS dependencies
+
+WORKDIR /usr/src/app
+
+COPY package*.json ./
+
+RUN npm install --production
+
+
+FROM node:12-alpine
+
+WORKDIR /home/node/app
+
+COPY --from=dependencies /usr/src/app/node_modules ./node_modules
+
+COPY --chown=node:node . .
+
+EXPOSE 4000
+
+USER node
+
+CMD ["npm", "start"]
 ```
+
+> Node.js 12 is used because this project is based on the legacy OWASP NodeGoat application. A production deployment should migrate to a currently supported Node.js version.
 
 ---
 
-## 2. Clone Repository
+# 🐳 Docker Compose
+
+The project uses Docker Compose to run:
+
+```text
+nodegoat-web
+nodegoat-mongo
+```
+
+The containers communicate through:
+
+```text
+backend-net
+```
+
+The application uses:
+
+```text
+MONGODB_URI=mongodb://mongo:27017/nodegoat
+```
+
+because `mongo` is the MongoDB service name inside Docker Compose.
+
+---
+
+# 🚀 Running the Project
+
+## 1. Clone the Repository
 
 ```bash
 git clone https://github.com/Dineth-ng/DevSecOps-NodeGoat.git
-cd DevSecOps-NodeGoat
+```
+
+Enter the project:
+
+```bash
+cd DevSecOps-NodeGoat/NodeGoat
 ```
 
 ---
 
-## 3. Start NodeGoat
-
-Move into the application directory:
+## 2. Build Docker Images
 
 ```bash
-cd NodeGoat
+docker compose build
 ```
 
-Build and start the containers:
+To perform a clean build:
 
 ```bash
-docker compose up -d --build
+docker compose build --no-cache
 ```
 
-Check container status:
+---
+
+## 3. Start Containers
+
+```bash
+docker compose up -d
+```
+
+---
+
+## 4. Check Containers
 
 ```bash
 docker compose ps
 ```
 
+Expected services:
+
+```text
+nodegoat-web
+nodegoat-mongo
+```
+
+MongoDB should show:
+
+```text
+27017/tcp
+```
+
+instead of:
+
+```text
+0.0.0.0:27017
+```
+
+because the database is not publicly exposed.
+
 ---
 
-## 4. Access Application
+## 5. Open NodeGoat
 
 Open:
 
-`http://localhost:4000`
-
-The NodeGoat application should now be available locally.
+```text
+http://localhost:4000
+```
 
 ---
 
-## 5. Stop Application
+## 6. View Logs
+
+```bash
+docker compose logs web
+```
+
+Or:
+
+```bash
+docker compose logs -f web
+```
+
+---
+
+## 7. Stop the Application
 
 ```bash
 docker compose down
 ```
 
+To also delete the database volume:
+
+```bash
+docker compose down -v
+```
+
 ---
 
-# Vulnerability Assessment
+# 🔐 Verify Non-Root Container
 
-The project investigates multiple vulnerabilities in OWASP NodeGoat.
+The web container runs using the Node.js `node` user instead of root.
 
-| ID | Vulnerability |
-|---|---|
-| T1 | Server-Side JavaScript Injection / Unsafe `eval()` |
-| T2 | NoSQL `$where` Injection |
-| T3 | Stored Cross-Site Scripting (XSS) |
-| T4 | Broken Access Control / IDOR |
-| T5 | Plaintext Password Storage & Hardcoded Secrets |
+Check with:
 
-For selected vulnerabilities the following workflow is used:
+```bash
+docker compose exec web whoami
+```
+
+Expected result:
 
 ```text
-Identify Vulnerability
-        |
-        v
-SAST Scan - BEFORE
-        |
-        v
-Controlled Demonstration
-        |
-        v
-Capture Evidence
-        |
-        v
-Secure Coding Fix
-        |
-        v
-Repeat Same Test
-        |
-        v
-SAST Scan - AFTER
+node
+```
+
+This reduces the impact of container compromise.
+
+---
+
+# 🌐 Verify Docker Network
+
+List Docker networks:
+
+```bash
+docker network ls
+```
+
+Inspect the project network:
+
+```bash
+docker network inspect nodegoat_backend-net
+```
+
+Both containers should be connected to the same backend network.
+
+---
+
+# 🔄 DevSecOps CI/CD Pipeline
+
+GitHub Actions automatically performs security checks when code is pushed or submitted through a Pull Request.
+
+Pipeline:
+
+```text
+              Source Code
+                   |
+                   v
+        +----------------------+
+        | Application Testing  |
+        +----------+-----------+
+                   |
+       +-----------+-----------+
+       |           |           |
+       v           v           v
+   Semgrep     Gitleaks    npm audit
+    SAST       Secrets     Dependencies
+       |           |           |
+       +-----------+-----------+
+                   |
+                   v
+             Docker Build
+                   |
+                   v
+             Trivy Scan
+                   |
+                   v
+              CI Result
+```
+
+---
+
+# ✅ Pipeline Security Checks
+
+The CI/CD workflow currently includes:
+
+### 1. Application Unit Tests
+
+Tests existing application functionality before later security stages continue.
+
+---
+
+### 2. Semgrep SAST
+
+Semgrep performs Static Application Security Testing.
+
+It checks JavaScript source code for dangerous patterns such as:
+
+```javascript
+eval(...)
+```
+
+Example local scan:
+
+```bash
+docker run --rm \
+  -v "$PWD:/src" \
+  -w /src \
+  semgrep/semgrep:latest \
+  semgrep scan \
+  --config .semgrep.yml \
+  --metrics off \
+  NodeGoat/app NodeGoat/config NodeGoat/server.js
+```
+
+Successful result:
+
+```text
+Scan completed successfully.
+Findings: 0
+```
+
+---
+
+### 3. Gitleaks Secret Scanning
+
+Gitleaks scans Git history for accidentally committed:
+
+- API keys
+- Passwords
+- Tokens
+- Private keys
+- Credentials
+
+Example:
+
+```bash
+docker run --rm \
+  -v "$PWD:/repo" \
+  -w /repo \
+  zricethezav/gitleaks:latest \
+  git /repo \
+  --gitleaks-ignore-path /repo/.gitleaksignore \
+  --redact \
+  --exit-code 1
+```
+
+The project uses `.gitleaksignore` only for reviewed and approved false-positive fingerprints.
+
+---
+
+### 4. npm Audit
+
+`npm audit` checks Node.js dependencies for known vulnerabilities.
+
+```bash
+npm audit
+```
+
+This is useful for identifying vulnerable third-party packages.
+
+---
+
+### 5. Docker Build
+
+The pipeline builds the hardened NodeGoat Docker image after previous checks have completed.
+
+---
+
+### 6. Trivy Container Scan
+
+Trivy scans the built Docker image for known vulnerabilities.
+
+The project focuses on:
+
+```text
+HIGH
+CRITICAL
+```
+
+severity vulnerabilities.
+
+Example local scan:
+
+```bash
+docker run --rm \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  aquasec/trivy:latest \
+  image \
+  --severity HIGH,CRITICAL \
+  nodegoat-web:latest
+```
+
+Trivy results can also be stored as GitHub Actions artifacts.
+
+---
+
+# 🛡 Security Pipeline Result
+
+The final pipeline contains the following security stages:
+
+```text
+Application Unit Tests       ✅
+Semgrep SAST                 ✅
+Gitleaks Secret Scan         ✅
+npm Audit                    ✅
+Docker Build                 ✅
+Trivy Container Scan         ✅
+```
+
+A security failure can prevent later pipeline stages from continuing.
+
+---
+
+# 🔍 Vulnerability Testing
+
+The project also contains practical OWASP NodeGoat vulnerability testing.
+
+Each vulnerability follows this process:
+
+```text
+Identify vulnerability
+        ↓
+Understand vulnerable code
+        ↓
+Exploit vulnerability
+        ↓
+Collect evidence
+        ↓
+Implement secure fix
+        ↓
+Retest
+        ↓
+Document results
 ```
 
 Evidence is stored under:
 
-`docs/vul_ss/`
-
----
-
-# DevSecOps CI/CD Pipeline
-
-GitHub Actions is used to automate build and security testing.
-
 ```text
-Push / Pull Request
-        |
-        v
-Install Dependencies
-        |
-        v
-Application Tests
-        |
-        v
-Semgrep SAST
-        |
-        v
-npm audit / SCA
-        |
-        v
-Gitleaks
-        |
-        v
-Docker Build
-        |
-        v
-Trivy Container Scan
-        |
-        v
-PASS / FAIL
+docs/vul_ss/
 ```
 
-Workflow configuration:
-
-`.github/workflows/devsecops.yml`
-
----
-
-## Security Gates
-
-### Semgrep
-
-Used for Static Application Security Testing (SAST).
-
-### npm audit
-
-Used to identify known vulnerabilities in Node.js dependencies.
-
-### Gitleaks
-
-Used to identify accidentally committed credentials, tokens and
-other secrets.
-
-### Trivy
-
-Used to scan the Docker image for known operating-system and
-application dependency vulnerabilities.
-
----
-
-# Docker Security
-
-The NodeGoat application is containerised using Docker.
-
-Security hardening includes:
-
-- Running the application with a non-root user where supported
-- Reducing unnecessary container privileges
-- Using `.dockerignore`
-- Avoiding secrets inside Docker images
-- Scanning the final image with Trivy
-- Separating application and database services
-
----
-
-# Branching Strategy
+and:
 
 ```text
-main
-  ^
-  |
- Dev
-  ^
-  |
-  +-- feature/member1-...
-  +-- feature/member2-...
-  +-- feature/member3-...
-  +-- feature/member4-...
+evidence/
 ```
 
-Team members develop changes on individual feature branches.
+---
 
-Pull Requests are created against the `Dev` branch.
+# 👥 Team
 
-The CI/CD security pipeline validates changes before they are merged.
+Responsibilities:
+
+- DevOps implementation
+- Docker containerization
+- Dockerfile hardening
+- Docker Compose configuration
+- Dedicated backend Docker network
+- Non-root container execution
+- Architecture design
+- Trust-boundary design
+- Trivy container vulnerability scanning
+- JavaScript Injection vulnerability testing and remediation
+- CI/CD integration support
+
+The project report assigns Member 1 responsibility for containerization, architecture, Trivy integration, and JavaScript injection retesting. 
 
 ---
 
-# Team Responsibilities
+## Other Team Responsibilities
 
-| Member | Main Responsibility |
-|---|---|
-| Member 1 | DevOps, Docker, container hardening, Trivy and architecture |
-| Member 2 | Injection vulnerabilities and threat modelling |
-| Member 3 | XSS, authentication/access control and risk assessment |
-| Member 4 | CI/CD, secrets management and security automation |
+Other team members contributed to:
 
----
-
-# Ethical Scope
-
-All vulnerability testing is performed against the intentionally
-vulnerable OWASP NodeGoat application in an authorised local
-environment.
-
-The techniques demonstrated in this project are for educational and
-defensive security purposes.
+- NoSQL Injection testing and remediation
+- Access Control vulnerability testing
+- Unvalidated Redirect vulnerability remediation
+- Security pipeline integration
+- Evidence collection
+- Documentation
 
 ---
 
-# Authors
+# 🌿 Git Branching Strategy
 
-IE3142 DevOps Security Group Project
+The project uses a feature-branch workflow.
 
-Sri Lanka Institute of Information Technology (SLIIT)
+```text
+feature branches
+      |
+      v
+     Dev
+      |
+      v
+     main
+```
+
+Example:
+
+```text
+feature/IT24101066-jsI
+        |
+        v
+       Dev
+        |
+        v
+       main
+```
+
+Developers work on separate branches and create Pull Requests into `Dev`.
+
+After integration testing and CI/CD security checks pass, `Dev` is merged into `main`.
+
+---
+
+# 🔀 Example Git Workflow
+
+Create or switch to a feature branch:
+
+```bash
+git checkout feature/IT24101066-jsI
+```
+
+Add changes:
+
+```bash
+git add .
+```
+
+Commit:
+
+```bash
+git commit -m "feat: harden NodeGoat Docker deployment"
+```
+
+Push:
+
+```bash
+git push origin feature/IT24101066-jsI
+```
+
+Then create a Pull Request:
+
+```text
+feature branch → Dev
+```
+
+After testing:
+
+```text
+Dev → main
+```
+
+---
+
+# 🔑 Secret Management
+
+Sensitive values should not be hardcoded directly into source code.
+
+Environment variables should be used for secrets such as:
+
+```text
+ZAP_API_KEY
+COOKIE_SECRET
+CRYPTO_KEY
+```
+
+Example:
+
+```javascript
+process.env.ZAP_API_KEY
+```
+
+Sensitive `.env` files must not be committed to Git.
+
+Example `.gitignore`:
+
+```gitignore
+.env
+.env.*
+```
+
+Generated security reports are also excluded:
+
+```gitignore
+reports/
+gitleaks-local.json
+```
+
+---
+
+# 🧪 Troubleshooting
+
+## Web container stops immediately
+
+Check:
+
+```bash
+docker compose ps -a
+```
+
+Then:
+
+```bash
+docker compose logs web
+```
+
+---
+
+## Check JavaScript syntax
+
+```bash
+node --check config/env/development.js
+```
+
+---
+
+## MongoDB Connection
+
+The application should use:
+
+```text
+mongodb://mongo:27017/nodegoat
+```
+
+Not:
+
+```text
+mongodb://localhost:27017/nodegoat
+```
+
+Inside the web container, `localhost` refers to the web container itself.
+
+Docker Compose uses the service name `mongo` as an internal DNS hostname.
+
+---
+
+## Trivy command not found
+
+Trivy does not need to be installed directly.
+
+Run it using Docker:
+
+```bash
+docker run --rm \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  aquasec/trivy:latest \
+  image \
+  --severity HIGH,CRITICAL \
+  nodegoat-web:latest
+```
+
+---
+
+# 📊 Security Benefits
+
+This implementation demonstrates several important DevSecOps principles:
+
+- Shift-left security
+- Automated security testing
+- Secure container configuration
+- Least privilege
+- Secret detection
+- Dependency vulnerability detection
+- Static code analysis
+- Container vulnerability scanning
+- Secure Git workflow
+- Repeatable builds
+- Security evidence collection
+
+---
+
+# ⚠️ Important Note
+
+OWASP NodeGoat is intentionally vulnerable and uses legacy dependencies.
+
+This project is designed for:
+
+- Education
+- Cybersecurity laboratories
+- DevSecOps demonstrations
+- Vulnerability testing
+
+It should **not** be exposed directly to the public internet or used as a production application.
+
+---
+
+# 📚 References
+
+- OWASP NodeGoat
+- OWASP Top 10
+- Docker Documentation
+- GitHub Actions Documentation
+- Semgrep Documentation
+- Gitleaks Documentation
+- Aqua Security Trivy Documentation
+
+---
+
+# 🎓 Module
+
+**IE3142 – DevOps Security**
+
+Cyber Security Degree Project
+
+Sri Lanka Institute of Information Technology – SLIIT
+
+---
+
+
+Cyber Security Undergraduate
+
+---
+
+## ⭐ Final DevSecOps Workflow
+
+```text
+Developer
+    |
+    v
+Feature Branch
+    |
+    v
+Pull Request
+    |
+    v
++--------------------------+
+| GitHub Actions           |
++--------------------------+
+| Unit Tests               |
+| Semgrep SAST             |
+| Gitleaks                 |
+| npm Audit                |
+| Docker Build             |
+| Trivy Scan               |
++--------------------------+
+    |
+    v
+Dev Branch
+    |
+    v
+Final Validation
+    |
+    v
+Main Branch
+```
+
+---
+
+> This project demonstrates how automated security controls can be integrated into a software development workflow to detect vulnerabilities earlier and improve application and container security.
