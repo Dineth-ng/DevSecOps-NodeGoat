@@ -1,14 +1,14 @@
-      - name: Scan repository history for secrets
-        run: |
-          test -f .gitleaksignore
+rules:
+  - id: javascript-eval-detection
+    languages:
+      - javascript
+    message: Avoid eval() because it can execute untrusted input.
+    severity: ERROR
+    pattern: eval(...)
 
-          docker run --rm \
-            -v "$GITHUB_WORKSPACE:/repo" \
-            -w /repo \
-            zricethezav/gitleaks:latest \
-            git /repo \
-            --gitleaks-ignore-path /repo/.gitleaksignore \
-            --redact \
-            --exit-code 1 \
-            --report-format json \
-            --report-path /repo/reports/gitleaks.json
+  - id: javascript-child-process-exec
+    languages:
+      - javascript
+    message: Review child_process execution for command injection risk.
+    severity: WARNING
+    pattern: $CP.exec(...)
