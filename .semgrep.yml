@@ -1,17 +1,14 @@
-rules:
-  - id: nodegoat-unsafe-eval
-    languages: [javascript]
-    severity: ERROR
-    message: >
-      eval executes JavaScript. Remove it and validate inputs
-      using a suitable numeric or structured parser.
-    pattern: eval(...)
+      - name: Scan repository history for secrets
+        run: |
+          test -f .gitleaksignore
 
-  - id: nodegoat-mongodb-where
-    languages: [javascript]
-    severity: ERROR
-    message: >
-      MongoDB $where executes JavaScript. Replace it with
-      ordinary query operators and validated input.
-    pattern: |
-      {$where: $EXPRESSION, ...}
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/repo" \
+            -w /repo \
+            zricethezav/gitleaks:latest \
+            git /repo \
+            --gitleaks-ignore-path /repo/.gitleaksignore \
+            --redact \
+            --exit-code 1 \
+            --report-format json \
+            --report-path /repo/reports/gitleaks.json

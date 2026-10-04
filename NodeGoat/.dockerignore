@@ -1,6 +1,32 @@
-Dockerfile
-docker-compose.yml
-.dockerignore
+#Git
 .git
 .github
 .gitignore
+
+
+#docker configuration
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+#Dependincies
+node_modules
+
+#Local secrets
+.env
+.env.*
+
+#Logs
+*.log 
+npm-debug.log* 
+
+# IDE
+.vscode
+.idea
+
+#Testing/ report output
+coverage
+reports
+
+#OS
+.DS_Store

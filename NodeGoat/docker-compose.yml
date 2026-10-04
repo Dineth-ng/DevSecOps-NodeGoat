@@ -1,17 +1,62 @@
-version: "3.7"
 
 services:
+
   web:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: nodegoat-web
+
     environment:
-      NODE_ENV:
+      NODE_ENV: development
       MONGODB_URI: mongodb://mongo:27017/nodegoat
-    command: sh -c "until nc -z -w 2 mongo 27017 && echo 'mongo is ready for connections' && node artifacts/db-reset.js && npm start; do sleep 2; done"
+
+    command: >
+      sh -c "
+      until nc -z -w 2 mongo 27017;
+      do
+        echo 'Waiting for MongoDB...';
+        sleep 2;
+      done;
+      echo 'MongoDB is ready';
+      node artifacts/db-reset.js;
+      npm start
+      "
+
     ports:
       - "4000:4000"
 
+    depends_on:
+      - mongo
+
+    networks:
+      - backend-net
+
+    security_opt:
+      - no-new-privileges:true
+
+
   mongo:
     image: mongo:4.4
+
+    container_name: nodegoat-mongo
+
     user: mongodb
-    expose:
-      - 27017
+
+    volumes:
+      - mongo-data:/data/db
+
+    networks:
+      - backend-net
+
+
+networks:
+
+  backend-net:
+    driver: bridge
+
+
+volumes:
+
+  mongo-data:
