@@ -1,18 +1,29 @@
-FROM node:12-alpine
-ENV WORKDIR /usr/src/app/
-WORKDIR $WORKDIR
-COPY package*.json $WORKDIR
-RUN npm install --production --no-cache
+# Stage 1 - Install production dependencies
+
+FROM node:12-alpine AS dependencies
+
+WORKDIR /usr/src/app
+
+COPY package*.json ./
+
+RUN npm install --production
+
+
+# Stage 2 - Runtime container
 
 FROM node:12-alpine
-ENV USER node
-ENV WORKDIR /home/$USER/app
-WORKDIR $WORKDIR
-COPY --from=0 /usr/src/app/node_modules node_modules
-RUN chown $USER:$USER $WORKDIR
-COPY --chown=node . $WORKDIR
-# In production environment uncomment the next line
-#RUN chown -R $USER:$USER /home/$USER && chmod -R g-s,o-rx /home/$USER && chmod -R o-wrx $WORKDIR
-# Then all further actions including running the containers should be done under non-root user.
-USER $USER
+
+WORKDIR /home/node/app
+
+COPY --from=dependencies /usr/src/app/node_modules ./node_modules
+
+# Copy application files
+COPY --chown=node:node . .
+
+# Application port
 EXPOSE 4000
+
+# Run application as non-root user
+USER node
+
+CMD ["npm", "start"]

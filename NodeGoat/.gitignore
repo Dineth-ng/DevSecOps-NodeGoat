@@ -31,3 +31,6 @@ test/e2e/videos/
 .dccache
 
 NodeGoat/artifacts/cert/*.key
+
+reports/
+gitleaks-local.json
