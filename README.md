@@ -1,3 +1,4 @@
+<img width="2720" height="1320" alt="nodegoat_architecture" src="https://github.com/user-attachments/assets/fef2d87b-adf1-40de-bf65-5355e4ece380" />
 # 🔐 DevSecOps NodeGoat Security Project
 
 A DevSecOps security implementation based on the **OWASP NodeGoat** vulnerable Node.js application.
@@ -84,6 +85,10 @@ The application contains two main containers:
                 +---------------------+
 ```
 
+
+<img width="2720" height="1320" alt="nodegoat_architecture" src="https://github.com/user-attachments/assets/306780d5-3470-499d-83c6-35bb74b7283b" />
+
+
 The web application communicates with MongoDB using Docker's internal DNS.
 
 For example:
@@ -116,8 +121,6 @@ DevSecOps-NodeGoat/
 ├── docs/
 │   ├── architecture/
 │   └── vul_ss/
-│
-├── evidence/
 │
 ├── NodeGoat/
 │   ├── app/
@@ -388,6 +391,9 @@ Pipeline:
                    v
               CI Result
 ```
+
+<img width="2720" height="920" alt="github_actions_pipeline" src="https://github.com/user-attachments/assets/ac1dd7f8-b8ff-4858-a741-452dbb94b43b" />
+
 
 ---
 
