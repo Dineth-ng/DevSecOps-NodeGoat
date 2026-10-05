@@ -1,4 +1,3 @@
-<img width="2720" height="1320" alt="nodegoat_architecture" src="https://github.com/user-attachments/assets/fef2d87b-adf1-40de-bf65-5355e4ece380" />
 # 🔐 DevSecOps NodeGoat Security Project
 
 A DevSecOps security implementation based on the **OWASP NodeGoat** vulnerable Node.js application.
